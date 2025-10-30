@@ -7,7 +7,7 @@ Note: this is a minimal example. Real execution should sandbox code in container
 """
 import subprocess
 import shlex
-from datetime import datetime
+from datetime import datetime, timezone
 from backend.app import db
 from backend.models import JobRecord
 import os
@@ -21,7 +21,7 @@ def run_job(job_id: int):
     if not job:
         return 'job not found'
     job.status = 'running'
-    job.started_at = datetime.utcnow()
+    job.started_at = datetime.now(timezone.utc)
     session.commit()
 
     # For safety in this scaffold, do not execute arbitrary code.
@@ -32,7 +32,7 @@ def run_job(job_id: int):
         if not cmd:
             job.output = 'no command provided; execution disabled in scaffold'
             job.status = 'finished'
-            job.finished_at = datetime.utcnow()
+            job.finished_at = datetime.now(timezone.utc)
             session.commit()
             return job.output
 
@@ -43,7 +43,7 @@ def run_job(job_id: int):
                                                       memory=os.getenv('JOB_RUN_MEMORY', '256m'))
             job.output = out
             job.status = 'finished' if rc == 0 else 'failed'
-            job.finished_at = datetime.utcnow()
+            job.finished_at = datetime.now(timezone.utc)
             session.commit()
             return out
 
@@ -53,12 +53,12 @@ def run_job(job_id: int):
         out = proc.stdout.decode('utf-8', errors='replace')
         job.output = out
         job.status = 'finished'
-        job.finished_at = datetime.utcnow()
+    job.finished_at = datetime.now(timezone.utc)
         session.commit()
         return out
     except Exception as e:
         job.output = f'error during execution: {e}'
         job.status = 'failed'
-        job.finished_at = datetime.utcnow()
+    job.finished_at = datetime.now(timezone.utc)
         session.commit()
         return job.output
