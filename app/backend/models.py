@@ -9,6 +9,8 @@ class User(db.Model):
     email = db.Column(db.String(200), unique=True, nullable=True)
     password_hash = db.Column(db.String(300), nullable=True)
     github_id = db.Column(db.String(200), unique=True, nullable=True)
+    # admin flag for role-based admin access
+    is_admin = db.Column(db.Boolean, default=False)
     xp_total = db.Column(db.Integer, default=0)
     level = db.Column(db.Integer, default=1)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -19,6 +21,7 @@ class User(db.Model):
             'username': self.username,
             'display_name': self.display_name,
             'email': self.email,
+            'is_admin': bool(self.is_admin),
             'xp_total': self.xp_total,
             'level': self.level,
             'created_at': self.created_at.isoformat(),
@@ -52,6 +55,15 @@ class Badge(db.Model):
     description = db.Column(db.String(500), nullable=True)
     icon = db.Column(db.String(500), nullable=True)
 
+
+class BadgeRule(db.Model):
+    __tablename__ = 'badge_rules'
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(100), nullable=False)
+    rule_type = db.Column(db.String(50), nullable=False)
+    params = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
 class UserBadge(db.Model):
     __tablename__ = 'user_badges'
     id = db.Column(db.Integer, primary_key=True)
@@ -78,3 +90,5 @@ class JobRecord(db.Model):
     started_at = db.Column(db.DateTime, nullable=True)
     finished_at = db.Column(db.DateTime, nullable=True)
     output = db.Column(db.Text, nullable=True)
+    # container id used by the runner to enable cancellation and debug
+    runner_container_id = db.Column(db.String(200), nullable=True)

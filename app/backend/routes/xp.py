@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 import json
 import time
+from backend.gamification import evaluate_badges_for_user
 
 xp_bp = Blueprint('xp', __name__)
 
@@ -106,6 +107,13 @@ def award_xp():
         raise
 
     leveled_up = new_level > old_level
+    # Evaluate badge rules for user (best-effort)
+    try:
+        evaluate_badges_for_user(db.session, user)
+        db.session.commit()
+    except Exception:
+        # if badge evaluation fails, don't block the normal flow
+        db.session.rollback()
     return jsonify({
         'ok': True,
         'new_xp': user.xp_total,

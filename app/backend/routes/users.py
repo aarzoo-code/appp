@@ -155,4 +155,13 @@ def me_checkin():
     db.session.commit()
 
     leveled_up = new_level > old_level
-    return jsonify({'ok': True, 'new_xp': u.xp_total, 'new_level': u.level, 'leveled_up': leveled_up, 'current_streak': streak.current_streak}), 200
+    # Evaluate badges and return awarded badge codes
+    awarded = []
+    try:
+        from backend.gamification import evaluate_badges_for_user
+        awarded = evaluate_badges_for_user(db.session, u) or []
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return jsonify({'ok': True, 'new_xp': u.xp_total, 'new_level': u.level, 'leveled_up': leveled_up, 'current_streak': streak.current_streak, 'awarded_badges': awarded}), 200

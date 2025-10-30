@@ -21,12 +21,16 @@ from backend.routes.users import users_bp
 from backend.routes.badges import badges_bp
 from backend.routes.auth import auth_bp
 from backend.routes.jobs import jobs_bp
+from backend.routes.admin import admin_bp
+from backend.routes.github_oauth import github_bp
 
 app.register_blueprint(xp_bp)
 app.register_blueprint(users_bp)
 app.register_blueprint(badges_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(jobs_bp)
+app.register_blueprint(admin_bp)
+app.register_blueprint(github_bp)
 
 @app.route('/health')
 def health():
