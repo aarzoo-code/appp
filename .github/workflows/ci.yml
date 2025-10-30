@@ -1,0 +1,212 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, feat/gamification-progress-checkin ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.12]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install backend deps
+        working-directory: app/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run backend tests
+        working-directory: app/backend
+        run: pytest -q
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    needs: backend-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install & Build frontend
+        working-directory: app
+        run: |
+          npm ci
+          npm run build
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: frontend-build
+    needs: backend-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./app
+          file: ./app/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/appp/web:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/appp/web:latest
+
+    backup-verify:
+      runs-on: ubuntu-latest
+      needs: backend-tests
+      steps:
+        - uses: actions/checkout@v4
+
+        - name: Set up Python
+          uses: actions/setup-python@v4
+          with:
+            python-version: '3.12'
+
+        - name: Install deps (including psycopg2)
+          run: |
+            python -m pip install --upgrade pip
+            pip install -r app/backend/requirements.txt
+            pip install psycopg2-binary
+
+        - name: Start temporary Postgres (source)
+          run: |
+            docker run -d --name ci_pg -p 5433:5432 -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=app postgres:13
+            # wait for Postgres ready
+            for i in $(seq 1 30); do
+              if pg_isready -h localhost -p 5433 -U postgres >/dev/null 2>&1; then
+                echo "Postgres source ready"; break
+              fi
+              sleep 1
+            done
+
+        - name: Run alembic migrations against source DB
+          run: |
+            # write a temporary alembic.ini that points to the test Postgres
+            cat app/backend/alembic.ini | sed "s|sqlalchemy.url = .*|sqlalchemy.url = postgresql://postgres:postgres@localhost:5433/app|" > /tmp/ci_alembic.ini
+            alembic -c /tmp/ci_alembic.ini upgrade head
+
+        - name: Dump source DB
+          run: |
+            docker exec -T ci_pg pg_dumpall -U postgres > /tmp/ci_dump.sql
+
+        - name: Start temporary Postgres (restore target)
+          run: |
+            docker run -d --name ci_pg_restore -p 5434:5432 -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=app postgres:13
+            for i in $(seq 1 30); do
+              if pg_isready -h localhost -p 5434 -U postgres >/dev/null 2>&1; then
+                echo "Postgres restore ready"; break
+              fi
+              sleep 1
+            done
+
+        - name: Restore dump to target DB
+          run: |
+            cat /tmp/ci_dump.sql | docker exec -i ci_pg_restore psql -U postgres -d app
+
+        - name: Verify schema on restored DB
+          run: |
+            docker exec -i ci_pg_restore psql -U postgres -d app -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='users';"
+
+        - name: Cleanup temporary Postgres containers
+          if: always()
+          run: |
+            docker rm -f ci_pg ci_pg_restore || true
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Sync docker-compose to remote host
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          source: "app/docker-compose.yml"
+          target: "/srv/appp/docker-compose.yml"
+
+      - name: Deploy to remote host via SSH and run migrations
+        uses: appleboy/ssh-action@v0.1.9
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          script: |
+            set -euo pipefail
+            echo "Logging in to GHCR on remote host"
+            docker login ghcr.io -u ${{ github.repository_owner }} -p "${{ secrets.GHCR_PAT }}"
+            echo "Pulling latest image"
+            docker pull ghcr.io/${{ github.repository_owner }}/appp/web:latest
+            echo "Stopping previous containers and starting updated stack (if docker-compose present)"
+            if [ -f /srv/appp/docker-compose.yml ]; then
+              docker-compose -f /srv/appp/docker-compose.yml pull || true
+              docker-compose -f /srv/appp/docker-compose.yml up -d --remove-orphans
+              # create backups directory
+              echo "Creating backups directory"
+              mkdir -p /srv/appp/backups
+
+              # try to perform a postgres dump from the postgres service (best-effort)
+              BACKUP_FILE="/srv/appp/backups/backup-$(date +'%Y%m%d%H%M%S').sql"
+              echo "Attempting to create DB backup to ${BACKUP_FILE} (best-effort)"
+              if docker-compose -f /srv/appp/docker-compose.yml ps -q postgres >/dev/null 2>&1; then
+                docker-compose -f /srv/appp/docker-compose.yml exec -T postgres sh -c "pg_dumpall -U ${POSTGRES_USER:-postgres}" > "${BACKUP_FILE}" || echo "Postgres dump failed"
+              else
+                echo "No postgres service found in compose; skipping containerized DB backup"
+              fi
+
+              echo "Running Alembic migrations via docker-compose"
+              # run migrations in a one-off container using the web service image; this uses compose's env
+              docker-compose -f /srv/appp/docker-compose.yml run --rm web alembic -c backend/alembic.ini upgrade head || {
+                echo "Migration command failed; attempting exec on running container as fallback"
+                # try to exec into running container
+                CT=$(docker-compose -f /srv/appp/docker-compose.yml ps -q web || true)
+                if [ -n "$CT" ]; then
+                  docker exec "$CT" alembic -c backend/alembic.ini upgrade head || true
+                fi
+              }
+            else
+              echo "No docker-compose.yml at /srv/appp, attempting docker run"
+              docker stop appp_web || true || true
+              docker rm appp_web || true || true
+              docker run -d --name appp_web -p 5000:5000 ghcr.io/${{ github.repository_owner }}/appp/web:latest
+              # give container a moment to start
+              sleep 3
+              echo "Attempting to run migrations via docker exec on fallback container"
+              docker exec appp_web alembic -c backend/alembic.ini upgrade head || true
+            fi
+

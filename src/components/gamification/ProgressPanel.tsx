@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import LevelProgress from './LevelProgress';
 import BadgeGrid from './BadgeGrid';
-import LevelUpModal from './LevelUpModal';
 
 interface ProgressPayload {
   ok: boolean;
@@ -20,10 +19,6 @@ const ProgressPanel: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ProgressPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalNewLevel, setModalNewLevel] = useState<number | undefined>(undefined);
-  const [modalNewXp, setModalNewXp] = useState<number | undefined>(undefined);
-  const [modalBadges, setModalBadges] = useState<string[] | undefined>(undefined);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('ai:token') : null;
 
@@ -56,13 +51,6 @@ const ProgressPanel: React.FC = () => {
       const res = await fetch('/api/v1/me/checkin', { method: 'POST', headers });
       const j = await res.json();
       if (j.ok) {
-        // if checkin awarded badges or leveled up, show level-up modal
-        if (j.leveled_up || (j.awarded_badges && j.awarded_badges.length > 0)) {
-          setModalNewLevel(j.new_level);
-          setModalNewXp(j.new_xp);
-          setModalBadges(j.awarded_badges || []);
-          setModalOpen(true);
-        }
         // refresh progress
         await fetchProgress();
       }
@@ -100,7 +88,6 @@ const ProgressPanel: React.FC = () => {
         <h4 className="font-semibold mb-2">Badges</h4>
         <BadgeGrid />
       </div>
-      <LevelUpModal open={modalOpen} newLevel={modalNewLevel} newXp={modalNewXp} awardedBadges={modalBadges} onClose={() => setModalOpen(false)} />
     </div>
   );
 };

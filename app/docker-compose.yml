@@ -23,6 +23,17 @@ services:
       - redis
       - postgres
 
+  rq-worker:
+    # lightweight RQ worker that uses the app image to run background jobs
+    build: .
+    command: sh -c "pip install -r backend/requirements.txt && rq worker default -u redis://redis:6379/0"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/app
+    depends_on:
+      - redis
+      - postgres
+
   redis:
     image: redis:7
 

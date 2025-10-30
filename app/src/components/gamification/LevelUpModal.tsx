@@ -6,10 +6,11 @@ interface Props {
   open: boolean;
   newLevel?: number;
   newXp?: number;
+  awardedBadges?: string[];
   onClose: () => void;
 }
 
-const LevelUpModal: React.FC<Props> = ({ open, newLevel, newXp, onClose }) => {
+const LevelUpModal: React.FC<Props> = ({ open, newLevel, newXp, awardedBadges, onClose }) => {
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   useEffect(() => {
     setDimensions({ width: window.innerWidth, height: window.innerHeight });
@@ -39,6 +40,16 @@ const LevelUpModal: React.FC<Props> = ({ open, newLevel, newXp, onClose }) => {
             <p className="text-sm text-muted-foreground mb-4">Congratulations — you reached level <strong>{newLevel}</strong>!</p>
             {typeof newXp === 'number' && (
               <p className="text-sm text-muted-foreground mb-4">Total XP: {newXp}</p>
+            )}
+            {awardedBadges && awardedBadges.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold mb-2">New Badges</h3>
+                <ul className="list-disc list-inside text-sm text-muted-foreground">
+                  {awardedBadges.map((b, i) => (
+                    <li key={i}>{b}</li>
+                  ))}
+                </ul>
+              </div>
             )}
             <div className="flex justify-end">
               <button className="px-4 py-2 rounded bg-primary text-primary-foreground" onClick={onClose}>Close</button>

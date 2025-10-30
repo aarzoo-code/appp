@@ -112,6 +112,12 @@ const Dashboard = () => {
               <Github className="w-4 h-4 mr-2" />
               {githubConnected ? "Disconnect GitHub" : "Connect GitHub"}
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
+              Admin
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/jobs')}>
+              Jobs
+            </Button>
             <Button variant="default" size="sm">
               <BookOpen className="w-4 h-4 mr-2" />
               Browse Labs
