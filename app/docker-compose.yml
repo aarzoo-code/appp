@@ -1,0 +1,34 @@
+version: '3.8'
+services:
+  web:
+    build: .
+    command: python -m backend.app
+    ports:
+      - '5000:5000'
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/app
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build: backend/runner
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/app
+      - USE_CONTAINER_RUNNER=1
+      - DOCKER_RUNNER_IMAGE=python:3.12-slim
+    depends_on:
+      - redis
+      - postgres
+
+  redis:
+    image: redis:7
+
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
