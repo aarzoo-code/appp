@@ -3,6 +3,7 @@ import { Progress } from "@/components/progress";
 import { Badge } from "@/components/badge";
 import { Button } from "@/components/button";
 import { Award, BookOpen, Code, Flame, Github, TrendingUp, Zap } from "lucide-react";
+import ProgressPanel from "@/components/gamification/ProgressPanel";
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 
@@ -164,17 +165,8 @@ const Dashboard = () => {
         </div>
 
         {/* Level Progress */}
-          <Card className="p-6 mb-8 bg-card border-border shadow-card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-foreground">Level {userStats.level} Progress</h3>
-            <span className="text-sm text-muted-foreground">
-              {stats.xp} / {stats.nextLevelXp} XP
-            </span>
-          </div>
-          <Progress value={(userStats.xp / userStats.nextLevelXp) * 100} className="h-3" />
-          <p className="text-sm text-muted-foreground mt-2">
-            {stats.nextLevelXp - stats.xp} XP until Level {stats.level + 1}
-          </p>
+        <Card className="p-6 mb-8 bg-card border-border shadow-card">
+          <ProgressPanel />
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
