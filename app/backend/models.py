@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from backend.app import db
 
 class User(db.Model):
@@ -11,7 +11,7 @@ class User(db.Model):
     github_id = db.Column(db.String(200), unique=True, nullable=True)
     xp_total = db.Column(db.Integer, default=0)
     level = db.Column(db.Integer, default=1)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
         return {
@@ -42,7 +42,7 @@ class XPEvent(db.Model):
         db.UniqueConstraint('user_id', 'source', 'source_id', name='uq_user_source_sourceid'),
         db.UniqueConstraint('user_id', 'idempotency_key', name='uq_user_idempotency_key'),
     )
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 class Badge(db.Model):
     __tablename__ = 'badges'
@@ -57,7 +57,7 @@ class UserBadge(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     badge_id = db.Column(db.Integer, db.ForeignKey('badges.id'), nullable=False)
-    earned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    earned_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 class Streak(db.Model):
     __tablename__ = 'streaks'
@@ -74,7 +74,7 @@ class JobRecord(db.Model):
     language = db.Column(db.String(50), default='python')
     payload = db.Column(db.JSON, nullable=True)
     status = db.Column(db.String(40), default='queued')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     started_at = db.Column(db.DateTime, nullable=True)
     finished_at = db.Column(db.DateTime, nullable=True)
     output = db.Column(db.Text, nullable=True)
